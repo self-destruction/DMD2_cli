@@ -10,6 +10,7 @@ import torch
 import time
 import PIL
 from PIL import Image
+from hidiffusion import apply_hidiffusion
     
 SAFETY_CHECKER = False
 
@@ -38,11 +39,11 @@ class ModelWrapper:
         self.text_encoder = SDXLTextEncoder(args, accelerator, dtype=self.DTYPE)
 
         # vanilla SDXL VAE needs to be kept in float32
-        self.vae = AutoencoderKL.from_pretrained(
-            args.model_id, 
-            subfolder="vae"
-        ).float().to(self.device)
-        self.vae_dtype = torch.float32
+        # self.vae = AutoencoderKL.from_pretrained(
+        #     args.model_id, 
+        #     subfolder="vae"
+        # ).float().to(self.device)
+        # self.vae_dtype = torch.float32
 
         self.tiny_vae = AutoencoderTiny.from_pretrained(
             "madebyollin/taesdxl", 
@@ -78,8 +79,9 @@ class ModelWrapper:
             subfolder="unet"
         ).to(self.DTYPE)
 
+        apply_hidiffusion(generator)
+
         state_dict = torch.load(args.checkpoint_path, map_location="cpu")
-        # print(generator.load_state_dict(state_dict, strict=True))
         generator.load_state_dict(state_dict, strict=True)
         generator.requires_grad_(False)
         return generator 
