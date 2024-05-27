@@ -239,8 +239,8 @@ parser.add_argument("--h", type=int, default=1024)
 # Width
 parser.add_argument("--w", type=int, default=1024)
 
-
 args = parser.parse_args()
+print(args)
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True 
