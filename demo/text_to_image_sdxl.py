@@ -80,6 +80,7 @@ class ModelWrapper:
 
         state_dict = torch.load(args.checkpoint_path, map_location="cpu")
         # print(generator.load_state_dict(state_dict, strict=True))
+        generator.load_state_dict(state_dict, strict=True)
         generator.requires_grad_(False)
         return generator 
 
