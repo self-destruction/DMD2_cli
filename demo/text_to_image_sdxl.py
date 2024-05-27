@@ -3,12 +3,13 @@ from main.sdxl.sdxl_text_encoder import SDXLTextEncoder
 from main.utils import get_x0_from_noise
 from transformers import AutoTokenizer
 from accelerate import Accelerator
-import gradio as gr    
+import random
 import numpy as np
-import argparse 
+import argparse
 import torch
-import time 
+import time
 import PIL
+from PIL import Image
     
 SAFETY_CHECKER = False
 
@@ -191,7 +192,7 @@ class ModelWrapper:
         print("Running model inference...")
 
         if seed == -1:
-            seed = np.random.randint(0, 1000000)
+            seed = np.random.randint(0, np.iinfo(np.int32).max)
 
         generator = torch.manual_seed(seed)
 
@@ -242,97 +243,47 @@ class ModelWrapper:
         )
 
 
-def create_demo():
-    TITLE = "# DMD2-SDXL Demo"
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--latent_resolution", type=int, default=128)
-    parser.add_argument("--image_resolution", type=int, default=1024)
-    parser.add_argument("--num_train_timesteps", type=int, default=1000)
-    parser.add_argument("--checkpoint_path", type=str)
-    parser.add_argument("--model_id", type=str, default="stabilityai/stable-diffusion-xl-base-1.0")
-    parser.add_argument("--precision", type=str, default="float32", choices=["float32", "float16", "bfloat16"])
-    parser.add_argument("--conditioning_timestep", type=int, default=999)
-    parser.add_argument("--num_step", type=int, default=4, choices=[1, 4])
-    parser.add_argument("--revision", type=str)
-    args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument("--latent_resolution", type=int, default=128)
+parser.add_argument("--image_resolution", type=int, default=1024)
+parser.add_argument("--num_train_timesteps", type=int, default=1000)
+parser.add_argument("--checkpoint_path", type=str)
+parser.add_argument("--model_id", type=str, default="stabilityai/stable-diffusion-xl-base-1.0") # RunDiffusion/Juggernaut-XL-v9
+parser.add_argument("--precision", type=str, default="float32", choices=["float32", "float16", "bfloat16"])
+parser.add_argument("--conditioning_timestep", type=int, default=999)
+parser.add_argument("--num_step", type=int, default=4, choices=[1, 4])
+parser.add_argument("--revision", type=str)
 
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True 
+parser.add_argument("--save_dir", type=str)
+parser.add_argument("--save_file_name", type=str)
 
-    accelerator = Accelerator()
-
-    model = ModelWrapper(args, accelerator)
-
-    with gr.Blocks() as demo:
-        gr.Markdown(TITLE)
-        with gr.Row():
-            with gr.Column():
-                prompt = gr.Text(
-                    value="An oil painting of two rabbits in the style of American Gothic, wearing the same clothes as in the original.",
-                    label="Prompt",
-                    placeholder='e.g. An oil painting of two rabbits in the style of American Gothic, wearing the same clothes as in the original.'
-                )
-                run_button = gr.Button("Run")
-                with gr.Accordion(label="Advanced options", open=True):
-                    seed = gr.Slider(
-                        label="Seed",
-                        minimum=-1,
-                        maximum=1000000,
-                        step=1,
-                        value=0,
-                        info="If set to -1, a different seed will be used each time.",
-                    )
-                    num_images = gr.Slider(
-                        label="Number of generated images",
-                        minimum=1,
-                        maximum=16,
-                        step=1,
-                        value=16,
-                        info="Use smaller number if you get out of memory error."
-                    )
-                    fast_vae_decode = gr.Checkbox(
-                        label="Use Tiny VAE for faster decoding",
-                        value=True
-                    )
-                    height = gr.Slider(
-                        label="Image Height",
-                        minimum=512,
-                        maximum=1536,
-                        step=64,
-                        value=1024,
-                        info="Image height in pixels. Set to 1024 for the best result"
-                    )
-                    width = gr.Slider(
-                        label="Image Width",
-                        minimum=512,
-                        maximum=1536,
-                        step=64,
-                        value=1024,
-                        info="Image width in pixels. Set to 1024 for the best result"
-                    )
-            with gr.Column():
-                result = gr.Gallery(label="Generated Images", show_label=False, elem_id="gallery", height=1024)
-
-                error_message = gr.Text(label="Job Status")
-
-        inputs = [
-            prompt,
-            seed,
-            height,
-            width,
-            num_images,
-            fast_vae_decode
-        ]
-        run_button.click(
-            fn=model.inference, inputs=inputs, outputs=[result, error_message], concurrency_limit=1
-        )
-    return demo
+parser.add_argument("--prompt", type=str, default='An oil painting of two rabbits in the style of American Gothic, wearing the same clothes as in the original')
+parser.add_argument("--seed", type=int, default=-1)
+parser.add_argument("--num_images", type=int, default=1, choices=range(1, 16))
+# Use Tiny VAE for faster decoding
+parser.add_argument("--fast_vae_decode", action='store_true', default=False)
+# Height
+parser.add_argument("--h", type=int, default=1024)
+# Width
+parser.add_argument("--w", type=int, default=1024)
 
 
-if __name__ == "__main__":
-    demo = create_demo()
-    demo.queue(api_open=False)
-    demo.launch(
-        show_error=True,
-        share=True
-    )
+args = parser.parse_args()
+
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True 
+
+accelerator = Accelerator()
+model = ModelWrapper(args, accelerator)
+
+ims = model.inference(
+    args.prompt,
+    args.seed,
+    args.h,
+    args.w,
+    args.num_images,
+    args.fast_vae_decode
+)
+
+for i, img in enumerate(ims):
+    Image.fromarray(img).save(f'{args.save_dir}/{args.save_file_name}_{i}.png')
