@@ -213,6 +213,8 @@ class ModelWrapper:
         for image in eval_images:
             output_image_list.append(PIL.Image.fromarray(image.cpu().numpy()))
 
+        print(f"run successfully in {(end_time-start_time):.2f} seconds")
+
         return output_image_list
 
 
