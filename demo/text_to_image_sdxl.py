@@ -71,26 +71,6 @@ class ModelWrapper:
         self.num_step = args.num_step 
         self.conditioning_timestep = args.conditioning_timestep 
 
-        # safety checker 
-        if SAFETY_CHECKER:
-            # adopted from https://huggingface.co/spaces/ByteDance/SDXL-Lightning/raw/main/app.py
-            from demo.safety_checker import StableDiffusionSafetyChecker
-            from transformers import CLIPFeatureExtractor
-
-            self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
-                "CompVis/stable-diffusion-safety-checker"
-            ).to(device=self.device, dtype=self.DTYPE)
-            self.feature_extractor = CLIPFeatureExtractor.from_pretrained(
-                "openai/clip-vit-base-patch32", 
-            )
-
-    def check_nsfw_images(self, images):
-        safety_checker_input = self.feature_extractor(images, return_tensors="pt") # .to(self.dviece)
-        has_nsfw_concepts = self.safety_checker(
-            clip_input=safety_checker_input.pixel_values.to(device=self.device, dtype=self.DTYPE),
-            images=images
-        )
-        return has_nsfw_concepts
 
     def create_generator(self, args):
         generator = UNet2DConditionModel.from_pretrained(
@@ -99,7 +79,7 @@ class ModelWrapper:
         ).to(self.DTYPE)
 
         state_dict = torch.load(args.checkpoint_path, map_location="cpu")
-        print(generator.load_state_dict(state_dict, strict=True))
+        # print(generator.load_state_dict(state_dict, strict=True))
         generator.requires_grad_(False)
         return generator 
 
@@ -232,15 +212,7 @@ class ModelWrapper:
         for image in eval_images:
             output_image_list.append(PIL.Image.fromarray(image.cpu().numpy()))
 
-        if SAFETY_CHECKER:
-            has_nsfw_concepts = self.check_nsfw_images(output_image_list)
-            if any(has_nsfw_concepts):
-                return [PIL.Image.new("RGB", (512, 512))], "NSFW concepts detected. Please try a different prompt."
-
-        return (
-            output_image_list,
-            f"run successfully in {(end_time-start_time):.2f} seconds"
-        )
+        return output_image_list
 
 
 parser = argparse.ArgumentParser()
@@ -286,4 +258,4 @@ ims = model.inference(
 )
 
 for i, img in enumerate(ims):
-    Image.fromarray(img).save(f'{args.save_dir}/{args.save_file_name}_{i}.png')
+    img.save(f'{args.save_dir}/{args.save_file_name}_{i}.png')
